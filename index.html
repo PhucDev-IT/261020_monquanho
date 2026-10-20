@@ -140,8 +140,11 @@ body.opened .dock.ui{transform:translate(-50%,0)}
   <button class="tool" id="musicBtn" aria-pressed="true" title="Bật/tắt nhạc">
     <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="lbl">Nhạc hộp</span>
   </button>
-  <button class="tool" id="spinBtn" aria-pressed="true" title="Tự xoay">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg><span class="lbl">Tự xoay</span>
+  <button class="tool" id="fsBtn" title="Toàn màn hình" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="lbl">Toàn màn hình</span>
+  </button>
+  <button class="tool" id="spinBtn" aria-pressed="true" title="Tự xoay và tự đổi hình">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg><span class="lbl">Tự động</span>
   </button>
 </div>
 
@@ -223,7 +226,7 @@ body.opened .dock.ui{transform:translate(-50%,0)}
   controls.enableDamping = true; controls.dampingFactor = 0.06;
   controls.enablePan = false; controls.minDistance = 5.5; controls.maxDistance = 28;
   controls.maxPolarAngle = Math.PI * 0.86;
-  controls.autoRotate = !reduce; controls.autoRotateSpeed = 0.55;
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.55;
   controls.target.set(0, 0.5, 0);
   controls.enabled = false;
 
@@ -659,11 +662,11 @@ body.opened .dock.ui{transform:translate(-50%,0)}
   $('nextWish').addEventListener('click', () => { showWish(wishI + 1); pulse(); });
 
   /* ---------------- interaction ---------------- */
-  let pulseV = 0, lastUser = -1e9, opened = false;
+  let pulseV = 0, lastUser = -1e9, opened = false, autoplay = true;
   function pulse() { pulseV = 1; gust(); Music.sparkle(); }
   const order = () => ['rose', 'lotus', 'heart', 'date'].concat(recipient ? ['name'] : []);
   let downAt = null;
-  renderer.domElement.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; lastUser = performance.now(); });
+  renderer.domElement.addEventListener('pointerdown', e => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   renderer.domElement.addEventListener('pointerup', e => {
     if (!downAt || !opened) return;
     if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) < 6 && performance.now() - downAt.t < 350) { pulse(); showWish(wishI + 1); }
@@ -671,7 +674,7 @@ body.opened .dock.ui{transform:translate(-50%,0)}
   });
   $('dock').addEventListener('click', e => {
     const b = e.target.closest('.chip'); if (!b) return;
-    lastUser = performance.now(); morphTo(b.dataset.shape); Music.sparkle();
+    lastUser = performance.now() + 6000; morphTo(b.dataset.shape); Music.sparkle();
   });
   const musicBtn = $('musicBtn'), spinBtn = $('spinBtn');
   musicBtn.addEventListener('click', () => {
@@ -680,9 +683,24 @@ body.opened .dock.ui{transform:translate(-50%,0)}
   });
   spinBtn.addEventListener('click', () => {
     const on = spinBtn.getAttribute('aria-pressed') !== 'true';
-    spinBtn.setAttribute('aria-pressed', String(on)); controls.autoRotate = on;
+    spinBtn.setAttribute('aria-pressed', String(on)); controls.autoRotate = autoplay = on; lastUser = performance.now();
   });
-  if (reduce) spinBtn.setAttribute('aria-pressed', 'false');
+
+  // Fullscreen hides the browser bars where the device allows it (Android, desktop); iPhone ignores it.
+  const fsBtn = $('fsBtn'), root = document.documentElement;
+  const fsOn = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const fsCan = !!(root.requestFullscreen || root.webkitRequestFullscreen) && (document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  function goFull() {
+    if (!fsCan || fsOn()) return;
+    try { const r = (root.requestFullscreen || root.webkitRequestFullscreen).call(root, { navigationUI: 'hide' }); r && r.catch && r.catch(() => {}); } catch (e) {}
+  }
+  if (fsCan) {
+    fsBtn.hidden = false;
+    fsBtn.addEventListener('click', () => {
+      if (fsOn()) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) {} }
+      else goFull();
+    });
+  }
 
   /* ---------------- intro ---------------- */
   const nameInput = $('nameInput');
@@ -701,6 +719,7 @@ body.opened .dock.ui{transform:translate(-50%,0)}
     $('intro').classList.add('gone');
     document.body.classList.add('opened');
     setTimeout(() => { $('intro').hidden = true; }, 1300);
+    goFull();
     if (musicBtn.getAttribute('aria-pressed') === 'true') Music.start();
     morphTo('rose');
     const portrait = innerWidth / innerHeight < .8;
@@ -757,8 +776,8 @@ body.opened .dock.ui{transform:translate(-50%,0)}
     } else if (controls.enabled) controls.update();
     else { camera.lookAt(controls.target); }
 
-    if (opened && !fly && U.uMix.value >= 1 && performance.now() - lastUser > 11000 && !reduce) {
-      const o = order(); morphTo(o[(o.indexOf(current) + 1) % o.length]); lastUser = performance.now() - 2000;
+    if (opened && !fly && U.uMix.value >= 1 && performance.now() - lastUser > 8000 && autoplay) {
+      const o = order(); morphTo(o[(o.indexOf(current) + 1) % o.length]); lastUser = performance.now();
     }
     composer ? composer.render() : renderer.render(scene, camera);
     requestAnimationFrame(frame);
